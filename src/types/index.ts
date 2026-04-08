@@ -1,9 +1,10 @@
 export interface CalendarNote {
   id: string;
-  date: string; // ISO date string YYYY-MM-DD
+  startDate: string; // ISO date string YYYY-MM-DD
+  endDate: string; // ISO date string YYYY-MM-DD
   text: string;
-  createdAt: string;
-  updatedAt: string;
+  createdAt: number;
+  updatedAt: number;
 }
 
 export interface DateRange {

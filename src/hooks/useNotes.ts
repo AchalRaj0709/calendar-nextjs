@@ -9,12 +9,30 @@ export function useNotes() {
   const [notes, setNotes] = useState<CalendarNote[]>([]);
   const [isLoaded, setIsLoaded] = useState(false);
 
-  // Load notes from localStorage on mount
+  // Load notes from localStorage on mount and handle backwards compatibility
   useEffect(() => {
     try {
       const stored = localStorage.getItem(STORAGE_KEY);
       if (stored) {
-        setNotes(JSON.parse(stored));
+        const parsed = JSON.parse(stored);
+        
+        // Backward compatibility migration mapper
+        const migratedNotes = parsed.map((note: any) => {
+          if (note.date) {
+            // It's the old format
+            return {
+              id: note.id || crypto.randomUUID(),
+              startDate: note.date,
+              endDate: note.date,
+              text: note.text,
+              createdAt: new Date(note.createdAt || Date.now()).getTime(),
+              updatedAt: new Date(note.updatedAt || Date.now()).getTime(),
+            };
+          }
+          return note; // Already new format
+        });
+        
+        setNotes(migratedNotes);
       }
     } catch (e) {
       console.error('Failed to load notes:', e);
@@ -33,13 +51,23 @@ export function useNotes() {
     }
   }, [notes, isLoaded]);
 
-  const addNote = useCallback((dateKey: string, text: string) => {
+  const addNote = useCallback((startDate: string, endDate: string, text: string) => {
+    // Normalization: Ensure startDate is always earlier than or equal to endDate
+    let finalStart = startDate;
+    let finalEnd = endDate;
+    
+    if (startDate > endDate) {
+      finalStart = endDate;
+      finalEnd = startDate;
+    }
+
     const newNote: CalendarNote = {
       id: crypto.randomUUID(),
-      date: dateKey,
+      startDate: finalStart,
+      endDate: finalEnd,
       text,
-      createdAt: new Date().toISOString(),
-      updatedAt: new Date().toISOString(),
+      createdAt: Date.now(),
+      updatedAt: Date.now(),
     };
     setNotes((prev) => [...prev, newNote]);
   }, []);
@@ -48,7 +76,7 @@ export function useNotes() {
     setNotes((prev) =>
       prev.map((note) =>
         note.id === id
-          ? { ...note, text, updatedAt: new Date().toISOString() }
+          ? { ...note, text, updatedAt: Date.now() }
           : note
       )
     );
@@ -58,23 +86,32 @@ export function useNotes() {
     setNotes((prev) => prev.filter((note) => note.id !== id));
   }, []);
 
-  const getNotesForDate = useCallback(
-    (dateKey: string) => {
-      return notes.filter((note) => note.date === dateKey);
-    },
-    [notes]
-  );
-
-  const getNotesForDateRange = useCallback(
+  // Simplified fetching logic - grabs any notes overlapping the currently selected logic range
+  const getNotesForCurrentSelection = useCallback(
     (startKey: string, endKey: string) => {
-      return notes.filter((note) => note.date >= startKey && note.date <= endKey);
+      let rangeStart = startKey;
+      let rangeEnd = endKey;
+      
+      if (startKey > endKey) {
+        rangeStart = endKey;
+        rangeEnd = startKey;
+      }
+
+      return notes.filter((note) => {
+        // A note should be visible if its [startDate, endDate] overlaps with the selection [rangeStart, rangeEnd]
+        // Overlap math: max(start1, start2) <= min(end1, end2)
+        const overlapStart = note.startDate > rangeStart ? note.startDate : rangeStart;
+        const overlapEnd = note.endDate < rangeEnd ? note.endDate : rangeEnd;
+        return overlapStart <= overlapEnd;
+      });
     },
     [notes]
   );
 
   const hasNotesForDate = useCallback(
     (dateKey: string) => {
-      return notes.some((note) => note.date === dateKey);
+      // Return true if the specific dateKey falls inclusive within ANY note's range
+      return notes.some((note) => note.startDate <= dateKey && note.endDate >= dateKey);
     },
     [notes]
   );
@@ -85,8 +122,7 @@ export function useNotes() {
     addNote,
     updateNote,
     deleteNote,
-    getNotesForDate,
-    getNotesForDateRange,
+    getNotesForCurrentSelection,
     hasNotesForDate,
   };
 }
