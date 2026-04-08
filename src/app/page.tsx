@@ -20,20 +20,16 @@ export default function Home() {
     addNote,
     updateNote,
     deleteNote,
-    getNotesForDate,
-    getNotesForDateRange,
+    getNotesForCurrentSelection,
     hasNotesForDate,
   } = useNotes();
 
   const handleDateClick = useCallback(
     (day: Date) => {
       if (!dateRange.start || (dateRange.start && dateRange.end)) {
-        // No start selected, or both selected: start fresh
         setDateRange({ start: day, end: null });
       } else {
-        // Start is selected, set end
         if (isSameDay(day, dateRange.start)) {
-          // Same day clicked — treat as single day selection
           setDateRange({ start: day, end: day });
         } else {
           setDateRange({ start: dateRange.start, end: day });
@@ -43,23 +39,14 @@ export default function Home() {
     [dateRange]
   );
 
-  // Get notes for the current selection
   const currentNotes = useMemo(() => {
     if (!dateRange.start) return [];
 
-    if (!dateRange.end || isSameDay(dateRange.start, dateRange.end)) {
-      return getNotesForDate(formatDateKey(dateRange.start));
-    }
+    const startKey = formatDateKey(dateRange.start);
+    const endKey = dateRange.end ? formatDateKey(dateRange.end) : startKey;
 
-    const start = isBefore(dateRange.start, dateRange.end)
-      ? dateRange.start
-      : dateRange.end;
-    const end = isBefore(dateRange.start, dateRange.end)
-      ? dateRange.end
-      : dateRange.start;
-
-    return getNotesForDateRange(formatDateKey(start), formatDateKey(end));
-  }, [dateRange, getNotesForDate, getNotesForDateRange]);
+    return getNotesForCurrentSelection(startKey, endKey);
+  }, [dateRange, getNotesForCurrentSelection]);
 
   const selectedDateLabel = useMemo(() => {
     if (!dateRange.start) return 'Select a date';
@@ -80,11 +67,17 @@ export default function Home() {
   const handleAddNote = useCallback(
     (text: string) => {
       if (!dateRange.start) return;
-      const dateKey = formatDateKey(dateRange.start);
-      addNote(dateKey, text);
+      const startKey = formatDateKey(dateRange.start);
+      const endKey = dateRange.end ? formatDateKey(dateRange.end) : startKey;
+      addNote(startKey, endKey, text);
     },
     [dateRange, addNote]
   );
+  
+  const handleJumpToToday = () => {
+    setCurrentMonth(new Date());
+    setDateRange({ start: new Date(), end: new Date() });
+  };
 
   // Avoid hydration mismatch
   if (!mounted) {
@@ -117,14 +110,20 @@ export default function Home() {
               </p>
             </div>
           </div>
-          <div className="flex items-center gap-4">
+          <div className="flex items-center gap-2 sm:gap-4 flex-wrap justify-end">
+            <button
+               onClick={handleJumpToToday}
+               className="px-3 py-1.5 rounded-lg text-xs font-medium text-accent bg-accent/10 hover:bg-accent/20 border border-transparent transition-all active:scale-95 whitespace-nowrap"
+            >
+               Jump to Today
+            </button>
             {dateRange.start && (
               <motion.button
                 initial={{ opacity: 0, scale: 0.8 }}
                 animate={{ opacity: 1, scale: 1 }}
                 id="clear-selection-btn"
                 onClick={() => setDateRange({ start: null, end: null })}
-                className="px-3 py-1.5 rounded-lg text-xs font-medium text-text-secondary bg-surface hover:bg-surface-hover transition-all active:scale-95"
+                className="px-3 py-1.5 rounded-lg text-xs font-medium text-text-secondary bg-surface hover:bg-surface-hover transition-all active:scale-95 whitespace-nowrap"
               >
                 Clear Selection
               </motion.button>
